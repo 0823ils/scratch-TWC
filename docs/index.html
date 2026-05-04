@@ -321,8 +321,16 @@ function setSearchTab(tab, el) {
     triggerSearch();
 }
 function setSearchSort(sort) {
-    sSort=sort; sPage=1;
-    document.getElementById('s-refresh-btn').style.display = sort==='random' ? '' : 'none';
+    sSort = sort; 
+    sPage = 1;
+    
+    const refreshBtn = document.getElementById('s-refresh-btn');
+    if (sort === 'random') {
+        refreshBtn.style.setProperty('display', 'flex', 'important'); // 確実に表示
+    } else {
+        refreshBtn.style.display = 'none';
+    }
+    
     triggerSearch();
 }
 function changeSearchPage(d) { sPage=Math.max(1,Math.min(sTotalPages,sPage+d)); doSearch(); window.scrollTo(0,0); }

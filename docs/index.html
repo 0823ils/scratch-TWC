@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Scratch 爆速検索</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 700px; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        h2 { color: #4D97FF; text-align: center; margin-bottom: 20px; }
+
+        /* ローディング画面 */
+        #loading-screen { text-align: center; padding: 40px 0; }
+        #loading-screen p { color: #888; margin-top: 12px; font-size: 0.95em; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #eee; border-top-color: #4D97FF; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #loading-progress { font-size: 0.8em; color: #bbb; margin-top: 6px; }
+
+        /* メインUI（DB読み込み完了後に表示） */
+        #main-ui { display: none; }
+
+        .mode-tabs { display: flex; margin-bottom: 20px; border: 2px solid #4D97FF; border-radius: 10px; overflow: hidden; }
+        .mode-tab { flex: 1; padding: 10px; text-align: center; font-size: 14px; font-weight: bold; cursor: pointer; color: #4D97FF; background: white; border: none; transition: all 0.2s; }
+        .mode-tab.active { background: #4D97FF; color: white; }
+        .mode-tab:not(.active):hover { background: #eef4ff; }
+
+        input { padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; transition: border 0.2s; }
+        input:focus { border-color: #4D97FF; }
+        #query { width: 100%; margin-bottom: 12px; }
+
+        .row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .tab { padding: 6px 16px; border-radius: 20px; border: 2px solid #ddd; background: white; cursor: pointer; font-size: 14px; font-weight: bold; transition: all 0.2s; color: #888; }
+        .tab.active { background: #4D97FF; border-color: #4D97FF; color: white; }
+        .spacer { flex: 1; }
+        .sort-label { font-size: 13px; color: #aaa; white-space: nowrap; }
+        .sort-select { padding: 6px 28px 6px 12px; border-radius: 20px; border: 2px solid #ddd; background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23aaa'/%3E%3C/svg%3E") no-repeat right 10px center; appearance: none; -webkit-appearance: none; cursor: pointer; font-size: 13px; font-weight: bold; color: #555; outline: none; }
+        .filter-toggle-btn { width: 36px; height: 36px; border-radius: 10px; border: 2px solid #ddd; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; padding: 0; }
+        .filter-toggle-btn:hover { border-color: #4D97FF; }
+        .filter-toggle-btn.active { background: #4D97FF; border-color: #4D97FF; }
+        .filter-toggle-btn svg path { stroke: #888; transition: stroke 0.2s; }
+        .filter-toggle-btn.active svg path { stroke: white; }
+        .filter-box { background: #f9f9f9; border: 1px solid #eee; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; max-height: 200px; opacity: 1; transition: max-height 0.3s ease, opacity 0.25s ease, padding 0.3s ease, margin 0.3s ease, border-width 0.3s ease; }
+        .filter-box.hidden { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; margin-bottom: 0; border-width: 0; }
+        .filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .filter-label { font-size: 13px; color: #888; white-space: nowrap; min-width: 80px; }
+        .filter-input { padding: 6px 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 13px; outline: none; transition: border 0.2s; width: 90px; }
+        .filter-input:focus { border-color: #4D97FF; }
+        .filter-sep { font-size: 13px; color: #aaa; }
+        .filter-input-wide { width: 180px; }
+
+        .status-text { color: #888; font-size: 0.9em; margin-bottom: 12px; min-height: 1.2em; }
+        .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+        .project-card { border-radius: 10px; overflow: hidden; border: 1px solid #eee; transition: box-shadow 0.2s, transform 0.2s; background: white; cursor: pointer; }
+        .project-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
+        .project-thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: #f0f0f0; display: block; }
+        .thumb-placeholder { width: 100%; aspect-ratio: 4/3; background: #f0f0f0; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 2em; }
+        .project-info { padding: 8px 10px; }
+        .project-title { font-size: 0.9em; font-weight: bold; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .project-author { font-size: 0.8em; color: #4D97FF; margin-top: 2px; cursor: pointer; }
+        .project-author:hover { text-decoration: underline; }
+        .project-meta { font-size: 0.75em; color: #aaa; margin-top: 3px; }
+        .empty { color: #bbb; text-align: center; padding: 30px; }
+
+        .pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 20px; }
+        .page-btn { padding: 8px 20px; border-radius: 8px; border: 2px solid #ddd; background: white; cursor: pointer; font-size: 14px; font-weight: bold; color: #555; transition: all 0.2s; }
+        .page-btn:hover:not(:disabled) { border-color: #4D97FF; color: #4D97FF; }
+        .page-btn:disabled { opacity: 0.3; cursor: default; }
+        .page-info { font-size: 14px; color: #888; }
+
+        .load-more-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 24px; }
+        .load-more-btn { padding: 12px 36px; border-radius: 24px; border: 2px solid #4D97FF; background: white; color: #4D97FF; font-size: 15px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        .load-more-btn:hover:not(:disabled) { background: #4D97FF; color: white; }
+        .load-more-btn:disabled { opacity: 0.5; cursor: default; }
+        .browse-count-text { font-size: 0.85em; color: #bbb; }
+
+        .refresh-btn { width: 36px; height: 36px; border-radius: 10px; border: 2px solid #4D97FF; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; padding: 0; }
+        .refresh-btn:hover { background: #4D97FF; }
+        .refresh-btn:hover svg path { stroke: white; }
+        .refresh-btn svg path { stroke: #4D97FF; transition: stroke 0.2s; }
+        .refresh-btn.spinning svg { animation: spin 0.6s linear; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Scratch 爆速検索</h2>
+
+    <!-- ローディング -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <p>データベースを読み込み中...</p>
+        <div id="loading-progress"></div>
+    </div>
+
+    <!-- メインUI -->
+    <div id="main-ui">
+        <div class="mode-tabs">
+            <button class="mode-tab active" id="mode-search-btn" onclick="setMode('search')">検索</button>
+            <button class="mode-tab" id="mode-browse-btn" onclick="setMode('browse')">全作品</button>
+        </div>
+
+        <!-- 検索モード -->
+        <div id="search-section">
+            <input type="text" id="query" placeholder="検索したいものを入力..." oninput="onSearchInput()" autocomplete="off">
+            <div class="row">
+                <button class="tab active" onclick="setSearchTab('title', this)">プロジェクト名</button>
+                <button class="tab" onclick="setSearchTab('author', this)">ユーザー名</button>
+                <div class="spacer"></div>
+                <span class="sort-label">並び替え:</span>
+                <select class="sort-select" onchange="setSearchSort(this.value)">
+                    <option value="loves">いいね順</option>
+                    <option value="newest">新しい順</option>
+                    <option value="oldest">古い順</option>
+                    <option value="random">ランダム</option>
+                </select>
+                <button class="filter-toggle-btn" id="s-filter-btn" onclick="toggleFilter('s')" title="絞り込み">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4h14M5 9h8M8 14h2" stroke="#888" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+                <button class="refresh-btn" id="s-refresh-btn" onclick="doSearch()" title="再抽選" style="display:none">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.8 0 3.4.87 4.4 2.2M13.5 2v3h-3" stroke="#4D97FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
+            <div class="filter-box hidden" id="s-filter-box">
+                <div class="filter-row">
+                    <span class="filter-label">いいね数</span>
+                    <input class="filter-input" type="number" id="s-loves-min" placeholder="下限" min="0" oninput="onSearchInput()">
+                    <span class="filter-sep">〜</span>
+                    <input class="filter-input" type="number" id="s-loves-max" placeholder="上限" min="0" oninput="onSearchInput()">
+                </div>
+                <div class="filter-row">
+                    <span class="filter-label">ユーザー名</span>
+                    <input class="filter-input filter-input-wide" type="text" id="s-author-exact" placeholder="完全一致" oninput="onSearchInput()" autocomplete="off">
+                </div>
+            </div>
+            <div class="status-text" id="s-status"></div>
+            <div id="s-results"></div>
+            <div class="pagination" id="s-pagination" style="display:none">
+                <button class="page-btn" id="s-prev" onclick="changeSearchPage(-1)">← 前へ</button>
+                <span class="page-info" id="s-page-info"></span>
+                <button class="page-btn" id="s-next" onclick="changeSearchPage(1)">次へ →</button>
+            </div>
+        </div>
+
+        <!-- 全作品モード -->
+        <div id="browse-section" style="display:none">
+            <div class="row">
+                <div class="spacer"></div>
+                <span class="sort-label">並び替え:</span>
+                <select class="sort-select" onchange="setBrowseSort(this.value)">
+                    <option value="loves">いいね順</option>
+                    <option value="newest">新しい順</option>
+                    <option value="oldest">古い順</option>
+                    <option value="random">ランダム</option>
+                </select>
+                <button class="filter-toggle-btn" id="b-filter-btn" onclick="toggleFilter('b')" title="絞り込み">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4h14M5 9h8M8 14h2" stroke="#888" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+                <button class="refresh-btn" id="b-refresh-btn" onclick="browseReset()" title="再抽選" style="display:none">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.8 0 3.4.87 4.4 2.2M13.5 2v3h-3" stroke="#4D97FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
+            <div class="filter-box hidden" id="b-filter-box">
+                <div class="filter-row">
+                    <span class="filter-label">いいね数</span>
+                    <input class="filter-input" type="number" id="b-loves-min" placeholder="下限" min="0" oninput="onBrowseFilterChange()">
+                    <span class="filter-sep">〜</span>
+                    <input class="filter-input" type="number" id="b-loves-max" placeholder="上限" min="0" oninput="onBrowseFilterChange()">
+                </div>
+                <div class="filter-row">
+                    <span class="filter-label">ユーザー名</span>
+                    <input class="filter-input filter-input-wide" type="text" id="b-author-exact" placeholder="完全一致" oninput="onBrowseFilterChange()" autocomplete="off">
+                </div>
+            </div>
+            <div class="status-text" id="b-status"></div>
+            <div id="b-results" class="project-grid"></div>
+            <div class="load-more-wrap" id="b-load-more-wrap" style="display:none">
+                <button class="load-more-btn" id="b-load-more-btn" onclick="browseLoadMore()">もっと読み込む</button>
+                <span class="browse-count-text" id="b-count"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const PAGE_SIZE = 50;
+let db = null;
+
+// ===== DB初期化 =====
+async function initDB() {
+    try {
+        const SQL = await initSqlJs({
+            locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}`
+        });
+
+        // DBファイルをfetch（進捗表示あり）
+        const resp = await fetch('projects.db');
+        if (!resp.ok) throw new Error('projects.db が見つかりません');
+
+        const total = parseInt(resp.headers.get('content-length') || '0');
+        const reader = resp.body.getReader();
+        const chunks = [];
+        let received = 0;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            if (total > 0) {
+                const pct = Math.round(received / total * 100);
+                const mb = (received / 1024 / 1024).toFixed(1);
+                document.getElementById('loading-progress').innerText = `${mb}MB / ${(total/1024/1024).toFixed(1)}MB (${pct}%)`;
+            }
+        }
+
+        const buf = new Uint8Array(received);
+        let offset = 0;
+        for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.length; }
+
+        db = new SQL.Database(buf);
+
+        // 表示切替
+        document.getElementById('loading-screen').style.display = 'none';
+        document.getElementById('main-ui').style.display = '';
+
+        // 全作品モードの初回ロードはタブクリック時に行う
+    } catch(e) {
+        document.getElementById('loading-screen').innerHTML =
+            `<p style="color:#e55">読み込みエラー: ${e.message}</p>`;
+    }
+}
+
+// ===== 共通 =====
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function openProject(id) { window.open('https://scratch.mit.edu/projects/' + id, '_blank', 'noopener'); }
+function openUser(u, e) { e.stopPropagation(); window.open('https://scratch.mit.edu/users/' + encodeURIComponent(u), '_blank', 'noopener'); }
+
+function cardHTML(p) {
+    return `<div class="project-card" onclick="openProject(${p.id})">
+        <img class="project-thumb" src="https://cdn2.scratch.mit.edu/get_image/project/${p.id}_480x360.png"
+            alt="${esc(p.title)}" loading="lazy"
+            onerror="this.outerHTML='<div class=\\'thumb-placeholder\\'>?</div>'">
+        <div class="project-info">
+            <div class="project-title">${esc(p.title)}</div>
+            <div class="project-author" onclick="openUser('${esc(p.author_username)}',event)">by ${esc(p.author_username)}</div>
+            <div class="project-meta">いいね ${(p.loves||0).toLocaleString()}</div>
+        </div>
+    </div>`;
+}
+
+// sql.js クエリ → 配列に変換
+function queryAll(sql, params=[]) {
+    const result = db.exec(sql, params);
+    if (!result.length) return [];
+    const { columns, values } = result[0];
+    return values.map(row => Object.fromEntries(columns.map((c, i) => [c, row[i]])));
+}
+function queryOne(sql, params=[]) {
+    const result = db.exec(sql, params);
+    if (!result.length || !result[0].values.length) return null;
+    const { columns, values } = result[0];
+    return Object.fromEntries(columns.map((c, i) => [c, values[0][i]]));
+}
+
+function buildWhere(col, q, lovesMin, lovesMax, authorExact) {
+    const conds = [];
+    const params = [];
+    if (q) {
+        q.trim().split(/\s+/).filter(k=>k).forEach(kw => {
+            conds.push(`${col} LIKE ?`);
+            params.push(`%${kw}%`);
+        });
+    }
+    if (lovesMin !== '') { conds.push('loves >= ?'); params.push(Number(lovesMin)); }
+    if (lovesMax !== '') { conds.push('loves <= ?'); params.push(Number(lovesMax)); }
+    if (authorExact) { conds.push('author_username = ?'); params.push(authorExact); }
+    return { where: conds.length ? 'WHERE ' + conds.join(' AND ') : '', params };
+}
+
+function orderByClause(sort) {
+    if (sort === 'newest') return 'ORDER BY id DESC';
+    if (sort === 'oldest') return 'ORDER BY id ASC';
+    if (sort === 'random') return 'ORDER BY RANDOM()';
+    return 'ORDER BY loves DESC';
+}
+
+function toggleFilter(prefix) {
+    const box = document.getElementById(prefix + '-filter-box');
+    const btn = document.getElementById(prefix + '-filter-btn');
+    const nowHidden = box.classList.toggle('hidden');
+    btn.classList.toggle('active', !nowHidden);
+}
+
+// ===== モード切替 =====
+let currentMode = 'search';
+let browseInitialized = false;
+
+function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('search-section').style.display = mode === 'search' ? '' : 'none';
+    document.getElementById('browse-section').style.display = mode === 'browse' ? '' : 'none';
+    document.getElementById('mode-search-btn').classList.toggle('active', mode === 'search');
+    document.getElementById('mode-browse-btn').classList.toggle('active', mode === 'browse');
+    if (mode === 'browse' && !browseInitialized) {
+        browseInitialized = true;
+        browseReset();
+    }
+}
+
+// ===== 検索モード =====
+let sTimer=null, sTab='title', sSort='loves', sPage=1, sTotalPages=1;
+
+function setSearchTab(tab, el) {
+    sTab=tab; sPage=1;
+    document.querySelectorAll('#search-section .tab').forEach(t=>t.classList.remove('active'));
+    el.classList.add('active');
+    triggerSearch();
+}
+function setSearchSort(sort) {
+    sSort=sort; sPage=1;
+    document.getElementById('s-refresh-btn').style.display = sort==='random' ? '' : 'none';
+    triggerSearch();
+}
+function changeSearchPage(d) { sPage=Math.max(1,Math.min(sTotalPages,sPage+d)); doSearch(); window.scrollTo(0,0); }
+function onSearchInput() { sPage=1; triggerSearch(); }
+
+function triggerSearch() {
+    clearTimeout(sTimer);
+    const q=document.getElementById('query').value.trim();
+    const lMin=document.getElementById('s-loves-min').value;
+    const lMax=document.getElementById('s-loves-max').value;
+    const auth=document.getElementById('s-author-exact').value.trim();
+    if (!q && !lMin && !lMax && !auth) {
+        document.getElementById('s-status').innerText='';
+        document.getElementById('s-results').innerHTML='';
+        document.getElementById('s-pagination').style.display='none';
+        return;
+    }
+    sTimer = setTimeout(doSearch, 200);
+}
+
+function doSearch() {
+    if (!db) return;
+    const srb = document.getElementById('s-refresh-btn');
+    srb.classList.add('spinning'); setTimeout(()=>srb.classList.remove('spinning'),600);
+
+    try {
+        const q=document.getElementById('query').value.trim();
+        const lMin=document.getElementById('s-loves-min').value;
+        const lMax=document.getElementById('s-loves-max').value;
+        const auth=document.getElementById('s-author-exact').value.trim();
+        const col = sTab==='author' ? 'author_username' : 'title';
+        const { where, params } = buildWhere(col, q, lMin, lMax, auth);
+        const order = orderByClause(sSort);
+        const offset = (sPage-1)*PAGE_SIZE;
+
+        const total = queryOne(`SELECT COUNT(*) as c FROM projects ${where}`, params).c;
+        const projects = queryAll(`SELECT * FROM projects ${where} ${order} LIMIT ${PAGE_SIZE} OFFSET ${offset}`, params);
+        sTotalPages = Math.max(1, Math.ceil(total/PAGE_SIZE));
+
+        document.getElementById('s-status').innerText = total.toLocaleString()+'件ヒット';
+
+        if (projects.length===0) {
+            document.getElementById('s-results').innerHTML='<div class="empty">見つかりませんでした</div>';
+            document.getElementById('s-pagination').style.display='none';
+            return;
+        }
+        document.getElementById('s-results').innerHTML=
+            '<div class="project-grid">'+projects.map(cardHTML).join('')+'</div>';
+        document.getElementById('s-pagination').style.display='flex';
+        document.getElementById('s-page-info').innerText=sPage+' / '+sTotalPages+'ページ';
+        document.getElementById('s-prev').disabled=sPage<=1;
+        document.getElementById('s-next').disabled=sPage>=sTotalPages;
+    } catch(e) {
+        document.getElementById('s-status').innerText='エラー: '+e.message;
+    }
+}
+
+// ===== 全作品モード =====
+let bSort='loves', bPage=1, bTotal=0, bTotalPages=1, bLoading=false;
+let bFilterTimer=null;
+
+function setBrowseSort(sort) {
+    bSort=sort;
+    document.getElementById('b-refresh-btn').style.display = sort==='random' ? '' : 'none';
+    browseReset();
+}
+function onBrowseFilterChange() {
+    clearTimeout(bFilterTimer);
+    bFilterTimer=setTimeout(browseReset,400);
+}
+
+function browseReset() {
+    if (!db) return;
+    bPage=1; bTotal=0; bTotalPages=1;
+    document.getElementById('b-results').innerHTML='';
+    document.getElementById('b-load-more-wrap').style.display='none';
+    document.getElementById('b-count').innerText='';
+    const brb=document.getElementById('b-refresh-btn');
+    brb.classList.add('spinning'); setTimeout(()=>brb.classList.remove('spinning'),600);
+    browseLoadMore();
+}
+
+function browseLoadMore() {
+    if (bLoading || !db) return;
+    bLoading=true;
+    const btn=document.getElementById('b-load-more-btn');
+    btn.disabled=true; btn.innerText='読み込み中...';
+    if (bPage===1) document.getElementById('b-status').innerText='読み込み中...';
+
+    try {
+        const lMin=document.getElementById('b-loves-min').value;
+        const lMax=document.getElementById('b-loves-max').value;
+        const auth=document.getElementById('b-author-exact').value.trim();
+        const { where, params } = buildWhere('title', '', lMin, lMax, auth);
+        const order = orderByClause(bSort);
+        const offset=(bPage-1)*PAGE_SIZE;
+
+        if (bPage===1) {
+            bTotal=queryOne(`SELECT COUNT(*) as c FROM projects ${where}`,params).c;
+            bTotalPages=Math.max(1,Math.ceil(bTotal/PAGE_SIZE));
+        }
+
+        const projects=queryAll(`SELECT * FROM projects ${where} ${order} LIMIT ${PAGE_SIZE} OFFSET ${offset}`,params);
+        document.getElementById('b-status').innerText='';
+
+        if (bPage===1 && projects.length===0) {
+            document.getElementById('b-results').innerHTML='<div class="empty" style="grid-column:1/-1">作品がありません</div>';
+            document.getElementById('b-load-more-wrap').style.display='none';
+            bLoading=false; return;
+        }
+
+        const grid=document.getElementById('b-results');
+        projects.forEach(p=>{
+            const tmp=document.createElement('div');
+            tmp.innerHTML=cardHTML(p);
+            grid.appendChild(tmp.firstElementChild);
+        });
+
+        const shown=Math.min(bPage*PAGE_SIZE,bTotal);
+        document.getElementById('b-count').innerText=shown.toLocaleString()+' / '+bTotal.toLocaleString()+'件';
+
+        if (bPage<bTotalPages) {
+            bPage++;
+            document.getElementById('b-load-more-wrap').style.display='flex';
+            btn.style.display=''; btn.disabled=false; btn.innerText='もっと読み込む';
+        } else {
+            document.getElementById('b-load-more-wrap').style.display='flex';
+            btn.style.display='none';
+        }
+    } catch(e) {
+        document.getElementById('b-status').innerText='エラー: '+e.message;
+        btn.disabled=false; btn.innerText='もっと読み込む';
+    }
+    bLoading=false;
+}
+
+initDB();
+</script>
+</body>
+</html>

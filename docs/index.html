@@ -312,7 +312,7 @@ function setMode(mode) {
 }
 
 // ===== 検索モード =====
-let sTimer=null, sTab='title', sSort='loves', sPage=1, sTotalPages=1;
+let sTimer=null, sTab='title', sSort='random', sPage=1, sTotalPages=1;
 
 function setSearchTab(tab, el) {
     sTab=tab; sPage=1;
@@ -389,7 +389,7 @@ function doSearch() {
 }
 
 // ===== 全作品モード =====
-let bSort='loves', bPage=1, bTotal=0, bTotalPages=1, bLoading=false;
+let bSort='random', bPage=1, bTotal=0, bTotalPages=1, bLoading=false;
 let bFilterTimer=null;
 
 function setBrowseSort(sort) {

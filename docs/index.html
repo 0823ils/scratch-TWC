@@ -186,20 +186,15 @@ const PAGE_SIZE = 50;
 let db = null;
 
 // ===== DB初期化 =====
-function setLoadingMsg(msg) {
-    document.getElementById('loading-progress').innerText = msg;
-}
-
 async function initDB() {
     try {
-        setLoadingMsg('sql.js を読み込み中...');
         const SQL = await initSqlJs({
             locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}`
         });
 
-        setLoadingMsg('projects.db を取得中...');
+        // DBファイルをfetch（進捗表示あり）
         const resp = await fetch('projects.db');
-        if (!resp.ok) throw new Error(`projects.db の取得失敗 (HTTP ${resp.status})`);
+        if (!resp.ok) throw new Error('projects.db が見つかりません');
 
         const total = parseInt(resp.headers.get('content-length') || '0');
         const reader = resp.body.getReader();
@@ -214,13 +209,10 @@ async function initDB() {
             if (total > 0) {
                 const pct = Math.round(received / total * 100);
                 const mb = (received / 1024 / 1024).toFixed(1);
-                setLoadingMsg(`${mb}MB / ${(total/1024/1024).toFixed(1)}MB (${pct}%)`);
-            } else {
-                setLoadingMsg(`${(received/1024/1024).toFixed(1)}MB 受信中...`);
+                document.getElementById('loading-progress').innerText = `${mb}MB / ${(total/1024/1024).toFixed(1)}MB (${pct}%)`;
             }
         }
 
-        setLoadingMsg('データベースを展開中...');
         const buf = new Uint8Array(received);
         let offset = 0;
         for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.length; }
@@ -229,16 +221,12 @@ async function initDB() {
 
         // 表示切替
         document.getElementById('loading-screen').style.display = 'none';
-        document.getElementById('main-ui').style.display = '';
+        document.getElementById('main-ui').style.display = 'block';
 
+        // 全作品モードの初回ロードはタブクリック時に行う
     } catch(e) {
         document.getElementById('loading-screen').innerHTML =
-            `<div style="color:#e55;padding:20px">
-                <p style="font-size:1.1em;font-weight:bold">読み込みエラー</p>
-                <p style="margin-top:8px;font-size:0.9em">${e.message}</p>
-                <p style="margin-top:8px;font-size:0.8em;color:#aaa">${e.stack||''}</p>
-            </div>`;
-        console.error('initDB error:', e);
+            `<p style="color:#e55">読み込みエラー: ${e.message}</p>`;
     }
 }
 

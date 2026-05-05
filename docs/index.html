@@ -78,6 +78,20 @@
         .refresh-btn:hover { background: #4D97FF; }
         .refresh-btn:hover svg path { stroke: white; }
         .refresh-btn svg path { stroke: #4D97FF; transition: stroke 0.2s; }
+        /* ターボワープ切替トグル */
+        .tw-toggle-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; justify-content: flex-end; }
+        .tw-toggle-label { font-size: 12px; color: #888; }
+        .tw-toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+        .tw-toggle input { opacity: 0; width: 0; height: 0; }
+        .tw-slider { position: absolute; inset: 0; background: #ddd; border-radius: 22px; cursor: pointer; transition: 0.2s; }
+        .tw-slider:before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+        input:checked + .tw-slider { background: #4D97FF; }
+        input:checked + .tw-slider:before { transform: translateX(18px); }
+
+        /* アイコン付き作者行 */
+        .project-author { font-size: 0.8em; color: #4D97FF; margin-top: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .author-icon { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: #eee; }
+
         .refresh-btn.spinning svg { animation: spin 0.6s linear; }
     </style>
 </head>
@@ -94,6 +108,13 @@
 
     <!-- メインUI -->
     <div id="main-ui">
+        <div class="tw-toggle-wrap">
+            <span class="tw-toggle-label">TurboWarp で開く</span>
+            <label class="tw-toggle">
+                <input type="checkbox" id="tw-toggle-cb" onchange="saveTWPref()">
+                <span class="tw-slider"></span>
+            </label>
+        </div>
         <div class="mode-tabs">
             <button class="mode-tab active" id="mode-search-btn" onclick="setMode('search')">検索</button>
             <button class="mode-tab" id="mode-browse-btn" onclick="setMode('browse')">全作品</button>
@@ -224,6 +245,7 @@ async function initDB() {
         // 表示切替
         document.getElementById('loading-screen').style.display = 'none';
         document.getElementById('main-ui').style.display = 'block';
+        loadTWPref();
 
         // 全作品モードの初回ロードはタブクリック時に行う
     } catch(e) {
@@ -236,7 +258,19 @@ async function initDB() {
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function openProject(id) { window.open('https://scratch.mit.edu/projects/' + id, '_blank', 'noopener'); }
+function openProject(id) {
+    const tw = document.getElementById('tw-toggle-cb').checked;
+    const url = tw
+        ? 'https://turbowarp.org/' + id
+        : 'https://scratch.mit.edu/projects/' + id;
+    window.open(url, '_blank', 'noopener');
+}
+function saveTWPref() {
+    try { localStorage.setItem('tw_pref', document.getElementById('tw-toggle-cb').checked ? '1' : '0'); } catch(e){}
+}
+function loadTWPref() {
+    try { if (localStorage.getItem('tw_pref') === '1') document.getElementById('tw-toggle-cb').checked = true; } catch(e){}
+}
 function openUser(u, e) { e.stopPropagation(); window.open('https://scratch.mit.edu/users/' + encodeURIComponent(u), '_blank', 'noopener'); }
 
 function cardHTML(p) {

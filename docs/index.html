@@ -273,28 +273,17 @@ async function initDB() {
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-async function openProject(id) {
+function openProject(id, hasTw) {
     const tw = document.getElementById('tw-toggle-cb').checked;
     if (tw) {
         window.open('https://turbowarp.org/' + id, '_blank', 'noopener');
         return;
     }
-    // TurboWarpトグルOFF → CORSフリープロキシ経由で説明文チェック
-    try {
-        const apiUrl = `https://api.scratch.mit.edu/projects/${id}`;
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
-        const res = await fetch(proxyUrl);
-        if (res.ok) {
-            const wrapper = await res.json();
-            const data = JSON.parse(wrapper.contents);
-            const text = ((data.description || '') + ' ' + (data.instructions || '')).toLowerCase();
-            const hasTW = text.includes('turbowarp') || text.includes('turbo warp') || text.includes('turbowarp.org');
-            if (hasTW) {
-                showTWWarn(id);
-                return;
-            }
-        }
-    } catch(e) {}
+    // TurboWarpトグルOFF → DBのhas_twフラグで判定（即座）
+    if (hasTw) {
+        showTWWarn(id);
+        return;
+    }
     window.open('https://scratch.mit.edu/projects/' + id, '_blank', 'noopener');
 }
 
@@ -324,7 +313,7 @@ function loadTWPref() {
 function openUser(u, e) { e.stopPropagation(); window.open('https://scratch.mit.edu/users/' + encodeURIComponent(u), '_blank', 'noopener'); }
 
 function cardHTML(p) {
-    return `<div class="project-card" onclick="openProject(${p.id})">
+    return `<div class="project-card" onclick="openProject(${p.id}, ${p.has_tw || 0})">
         <img class="project-thumb" src="https://cdn2.scratch.mit.edu/get_image/project/${p.id}_480x360.png"
             alt="${esc(p.title)}" loading="lazy"
             onerror="this.outerHTML='<div class=\\'thumb-placeholder\\'>?</div>'">

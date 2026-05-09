@@ -279,11 +279,14 @@ async function openProject(id) {
         window.open('https://turbowarp.org/' + id, '_blank', 'noopener');
         return;
     }
-    // TurboWarpトグルOFF → 説明文チェック
+    // TurboWarpトグルOFF → CORSフリープロキシ経由で説明文チェック
     try {
-        const res = await fetch(`https://api.scratch.mit.edu/projects/${id}`);
+        const apiUrl = `https://api.scratch.mit.edu/projects/${id}`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
+        const res = await fetch(proxyUrl);
         if (res.ok) {
-            const data = await res.json();
+            const wrapper = await res.json();
+            const data = JSON.parse(wrapper.contents);
             const text = ((data.description || '') + ' ' + (data.instructions || '')).toLowerCase();
             const hasTW = text.includes('turbowarp') || text.includes('turbo warp') || text.includes('turbowarp.org');
             if (hasTW) {

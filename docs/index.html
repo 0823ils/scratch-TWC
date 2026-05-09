@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Scratch TWC (Technical Works Collection)</title>
+    <title>Scratch TWC</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -78,6 +78,21 @@
         .refresh-btn:hover { background: #4D97FF; }
         .refresh-btn:hover svg path { stroke: white; }
         .refresh-btn svg path { stroke: #4D97FF; transition: stroke 0.2s; }
+
+        /* TurboWarp警告モーダル */
+        .tw-warn-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+        .tw-warn-box { background: white; border-radius: 14px; padding: 24px; max-width: 340px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+        .tw-warn-title { font-size: 1em; font-weight: bold; color: #333; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+        .tw-warn-title span { font-size: 1.3em; }
+        .tw-warn-body { font-size: 0.88em; color: #666; line-height: 1.6; margin-bottom: 18px; }
+        .tw-warn-btns { display: flex; gap: 8px; }
+        .tw-warn-btn { flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 0.9em; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        .tw-warn-btn-scratch { background: #f0f0f0; color: #555; }
+        .tw-warn-btn-scratch:hover { background: #e0e0e0; }
+        .tw-warn-btn-tw { background: #4D97FF; color: white; }
+        .tw-warn-btn-tw:hover { background: #3a7fd4; }
+        .tw-warn-btn-cancel { flex: 0.6; background: white; color: #aaa; border: 1px solid #ddd !important; }
+
         /* ターボワープ切替トグル */
         .tw-toggle-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; justify-content: flex-end; }
         .tw-toggle-label { font-size: 12px; color: #888; }
@@ -97,7 +112,7 @@
 </head>
 <body>
 <div class="container">
-    <h2>scratch TWC</h2>
+    <h2>scratch TWC (Technical Works Collection)</h2>
 
     <!-- ローディング -->
     <div id="loading-screen">
@@ -258,12 +273,44 @@ async function initDB() {
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function openProject(id) {
+async function openProject(id) {
     const tw = document.getElementById('tw-toggle-cb').checked;
-    const url = tw
-        ? 'https://turbowarp.org/' + id
-        : 'https://scratch.mit.edu/projects/' + id;
-    window.open(url, '_blank', 'noopener');
+    if (tw) {
+        window.open('https://turbowarp.org/' + id, '_blank', 'noopener');
+        return;
+    }
+    // TurboWarpトグルOFF → 説明文チェック
+    try {
+        const res = await fetch(`https://api.scratch.mit.edu/projects/${id}`);
+        if (res.ok) {
+            const data = await res.json();
+            const text = ((data.description || '') + ' ' + (data.instructions || '')).toLowerCase();
+            const hasTW = text.includes('turbowarp') || text.includes('turbo warp') || text.includes('turbowarp.org');
+            if (hasTW) {
+                showTWWarn(id);
+                return;
+            }
+        }
+    } catch(e) {}
+    window.open('https://scratch.mit.edu/projects/' + id, '_blank', 'noopener');
+}
+
+function showTWWarn(id) {
+    document.getElementById('tw-warn-body').innerText =
+        'この作品の説明欄にTurboWarpのリンクが含まれています。\nScratchで動かすと重い・正常に動作しない可能性があります。';
+    document.getElementById('tw-warn-open-scratch').onclick = () => {
+        window.open('https://scratch.mit.edu/projects/' + id, '_blank', 'noopener');
+        closeTWWarn();
+    };
+    document.getElementById('tw-warn-open-tw').onclick = () => {
+        window.open('https://turbowarp.org/' + id, '_blank', 'noopener');
+        closeTWWarn();
+    };
+    document.getElementById('tw-warn-overlay').style.display = 'flex';
+}
+
+function closeTWWarn() {
+    document.getElementById('tw-warn-overlay').style.display = 'none';
 }
 function saveTWPref() {
     try { localStorage.setItem('tw_pref', document.getElementById('tw-toggle-cb').checked ? '1' : '0'); } catch(e){}
@@ -503,5 +550,16 @@ function browseLoadMore() {
 
 initDB();
 </script>
+<div class="tw-warn-overlay" id="tw-warn-overlay" style="display:none" onclick="if(event.target===this)closeTWWarn()">
+    <div class="tw-warn-box">
+        <div class="tw-warn-title"><span>⚠️</span> Scratchでは重いかも</div>
+        <div class="tw-warn-body" id="tw-warn-body"></div>
+        <div class="tw-warn-btns">
+            <button class="tw-warn-btn tw-warn-btn-cancel" onclick="closeTWWarn()">キャンセル</button>
+            <button class="tw-warn-btn tw-warn-btn-scratch" id="tw-warn-open-scratch">Scratchで開く</button>
+            <button class="tw-warn-btn tw-warn-btn-tw" id="tw-warn-open-tw">TurboWarpで開く</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

@@ -85,13 +85,13 @@
         .tw-warn-title { font-size: 1em; font-weight: bold; color: #333; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
         .tw-warn-title span { font-size: 1.3em; }
         .tw-warn-body { font-size: 0.88em; color: #666; line-height: 1.6; margin-bottom: 18px; }
-        .tw-warn-btns { display: flex; gap: 8px; }
-        .tw-warn-btn { flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 0.9em; font-weight: bold; cursor: pointer; transition: all 0.2s; }
-        .tw-warn-btn-scratch { background: #f0f0f0; color: #555; }
-        .tw-warn-btn-scratch:hover { background: #e0e0e0; }
+        .tw-warn-btns { display: flex; flex-direction: column; gap: 8px; }
+        .tw-warn-btn { width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 0.95em; font-weight: bold; cursor: pointer; transition: all 0.2s; }
         .tw-warn-btn-tw { background: #4D97FF; color: white; }
         .tw-warn-btn-tw:hover { background: #3a7fd4; }
-        .tw-warn-btn-cancel { flex: 0.6; background: white; color: #aaa; border: 1px solid #ddd !important; }
+        .tw-warn-btn-scratch { background: #f0f0f0; color: #555; }
+        .tw-warn-btn-scratch:hover { background: #e0e0e0; }
+        .tw-warn-btn-cancel { background: white; color: #aaa; border: 1px solid #eee !important; font-weight: normal; font-size: 0.85em; }
 
         /* ターボワープ切替トグル */
         .tw-toggle-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; justify-content: flex-end; }
@@ -547,9 +547,9 @@ initDB();
         <div class="tw-warn-title"><span>⚠️</span> Scratchでは重いかも</div>
         <div class="tw-warn-body" id="tw-warn-body"></div>
         <div class="tw-warn-btns">
+            <button class="tw-warn-btn tw-warn-btn-tw" id="tw-warn-open-tw">TurboWarp で開く</button>
+            <button class="tw-warn-btn tw-warn-btn-scratch" id="tw-warn-open-scratch">Scratch で開く（重いかも）</button>
             <button class="tw-warn-btn tw-warn-btn-cancel" onclick="closeTWWarn()">キャンセル</button>
-            <button class="tw-warn-btn tw-warn-btn-scratch" id="tw-warn-open-scratch">Scratchで開く</button>
-            <button class="tw-warn-btn tw-warn-btn-tw" id="tw-warn-open-tw">TurboWarpで開く</button>
         </div>
     </div>
 </div>

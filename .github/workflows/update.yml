@@ -23,6 +23,8 @@ jobs:
       - name: Build
         run: cargo build --release
       - uses: oven-sh/setup-bun@v2
+      - name: Clean old data
+        run: rm -f scratch_projects.jsonl users.jsonl projects.db
       - name: Fetch
         run: ./target/release/scratch-mega-fetcher
       - name: Import

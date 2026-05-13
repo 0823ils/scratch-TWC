@@ -19,7 +19,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: Linux-cargo
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
       - name: Build
         run: cargo build --release
       - uses: oven-sh/setup-bun@v2
@@ -38,5 +38,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/
-          git diff --cached --quiet || git commit -m "auto update"
-          git push
+          git diff --cached --quiet || git commit -m "auto update $(date +'

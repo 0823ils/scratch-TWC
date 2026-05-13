@@ -1,0 +1,55 @@
+name: Update Database
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build fetcher
+        run: cargo build --release
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Fetch data
+        run: ./target/release/scratch-mega-fetcher
+
+      - name: Import to DB
+        run: timeout 120 bun run server.ts || true
+
+      - name: Deploy to docs/
+        run: |
+          sqlite3 projects.db "PRAGMA wal_checkpoint(TRUNCATE); VACUUM;"
+          mkdir -p docs
+          cp index.html docs/index.html
+          cp projects.db docs/projects.db
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/projects.db docs/index.html
+          git diff --cached --quiet || git commit -m "auto update $(date +'%Y-%m-%d')"
+          git push

@@ -2,13 +2,28 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Scratch TWC</title>
+    <title>Scratch TWC (Technical Works Collection)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; display: flex; justify-content: center; }
-        .container { width: 100%; max-width: 700px; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        h2 { color: #4D97FF; text-align: center; margin-bottom: 20px; }
+        body { font-family: sans-serif; background: #f0f2f5; padding-top: 70px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 700px; background: white; padding: 24px 30px 30px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin: 20px 0 20px; }
+
+        /* ===== ヘッダー ===== */
+        .site-header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: #4D97FF; box-shadow: 0 2px 12px rgba(77,151,255,0.35); }
+        .header-inner { max-width: 700px; margin: 0 auto; padding: 0 20px; height: 56px; display: flex; align-items: center; gap: 14px; }
+        .header-logo { font-size: 17px; font-weight: 800; color: white; letter-spacing: -0.3px; white-space: nowrap; flex-shrink: 0; }
+        .header-mode-tabs { display: flex; background: rgba(255,255,255,0.18); border-radius: 8px; overflow: hidden; flex-shrink: 0; padding: 3px; gap: 2px; }
+        .header-mode-tab { padding: 4px 14px; text-align: center; font-size: 13px; font-weight: bold; cursor: pointer; color: rgba(255,255,255,0.75); background: transparent; border: none; border-radius: 6px; transition: all 0.2s; }
+        .header-mode-tab.active { background: white; color: #4D97FF; }
+        .header-mode-tab:not(.active):hover { background: rgba(255,255,255,0.25); color: white; }
+        .header-spacer { flex: 1; }
+        .header-tw-wrap { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+        .header-tw-label { font-size: 11px; color: rgba(255,255,255,0.85); white-space: nowrap; }
+        .header-lang-switch { display: flex; gap: 2px; background: rgba(255,255,255,0.18); border-radius: 16px; padding: 3px; flex-shrink: 0; }
+        .header-lang-btn { padding: 3px 10px; border-radius: 12px; border: none; background: transparent; cursor: pointer; font-size: 11px; font-weight: bold; color: rgba(255,255,255,0.75); transition: all 0.2s; }
+        .header-lang-btn.active { background: white; color: #4D97FF; }
+        .header-lang-btn:not(.active):hover { color: white; background: rgba(255,255,255,0.25); }
 
         #loading-screen { text-align: center; padding: 40px 0; }
         #loading-screen p { color: #888; margin-top: 12px; font-size: 0.95em; }
@@ -91,34 +106,41 @@
         .tw-warn-btn-scratch:hover { background: #e0e0e0; }
         .tw-warn-btn-cancel { background: white; color: #aaa; border: 1px solid #eee !important; font-weight: normal; font-size: 0.85em; }
 
-        .tw-toggle-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; justify-content: flex-end; }
-        .tw-toggle-label { font-size: 12px; color: #888; }
-        .tw-toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+        .tw-toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
         .tw-toggle input { opacity: 0; width: 0; height: 0; }
-        .tw-slider { position: absolute; inset: 0; background: #ddd; border-radius: 22px; cursor: pointer; transition: 0.2s; }
-        .tw-slider:before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: 0.2s; }
-        input:checked + .tw-slider { background: #4D97FF; }
-        input:checked + .tw-slider:before { transform: translateX(18px); }
+        .tw-slider { position: absolute; inset: 0; background: rgba(255,255,255,0.3); border-radius: 20px; cursor: pointer; transition: 0.2s; }
+        .tw-slider:before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+        input:checked + .tw-slider { background: rgba(255,255,255,0.9); }
+        input:checked + .tw-slider:before { transform: translateX(16px); background: #4D97FF; }
 
-        /* 言語切替 */
-        .lang-toggle-wrap { display: flex; justify-content: flex-end; margin-bottom: 12px; }
-        .lang-switch { display: flex; gap: 4px; background: #f0f2f5; border-radius: 20px; padding: 3px; }
-        .lang-btn { padding: 4px 14px; border-radius: 16px; border: none; background: transparent; cursor: pointer; font-size: 12px; font-weight: bold; color: #888; transition: all 0.2s; }
-        .lang-btn.active { background: white; color: #4D97FF; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
-        .lang-btn:not(.active):hover { color: #4D97FF; }
+        /* 言語切替はヘッダーに移動 */
     </style>
 </head>
 <body>
-<div class="container">
-    <h2>scratch TWC (Technical Works Collection)</h2>
-
-    <!-- 言語切替 / Language toggle -->
-    <div class="lang-toggle-wrap">
-        <div class="lang-switch">
-            <button class="lang-btn active" id="lang-ja" onclick="setLang('ja')">日本語</button>
-            <button class="lang-btn" id="lang-en" onclick="setLang('en')">English</button>
+<!-- ===== サイトヘッダー ===== -->
+<header class="site-header">
+    <div class="header-inner">
+        <div class="header-logo">scratch TWC</div>
+        <div class="header-mode-tabs">
+            <button class="header-mode-tab active" id="mode-search-btn" onclick="setMode('search')" data-i18n="modeSearch">検索</button>
+            <button class="header-mode-tab" id="mode-browse-btn" onclick="setMode('browse')" data-i18n="modeBrowse">全作品</button>
+        </div>
+        <div class="header-spacer"></div>
+        <div class="header-tw-wrap">
+            <span class="header-tw-label" data-i18n="twToggleLabel">TurboWarp で開く</span>
+            <label class="tw-toggle">
+                <input type="checkbox" id="tw-toggle-cb" onchange="saveTWPref()">
+                <span class="tw-slider"></span>
+            </label>
+        </div>
+        <div class="header-lang-switch">
+            <button class="header-lang-btn active" id="lang-ja" onclick="setLang('ja')">日本語</button>
+            <button class="header-lang-btn" id="lang-en" onclick="setLang('en')">English</button>
         </div>
     </div>
+</header>
+
+<div class="container">
 
     <!-- ローディング -->
     <div id="loading-screen">
@@ -129,17 +151,7 @@
 
     <!-- メインUI -->
     <div id="main-ui">
-        <div class="tw-toggle-wrap">
-            <span class="tw-toggle-label" data-i18n="twToggleLabel">TurboWarp で開く</span>
-            <label class="tw-toggle">
-                <input type="checkbox" id="tw-toggle-cb" onchange="saveTWPref()">
-                <span class="tw-slider"></span>
-            </label>
-        </div>
-        <div class="mode-tabs">
-            <button class="mode-tab active" id="mode-search-btn" onclick="setMode('search')" data-i18n="modeSearch">検索</button>
-            <button class="mode-tab" id="mode-browse-btn" onclick="setMode('browse')" data-i18n="modeBrowse">全作品</button>
-        </div>
+        <div class="mode-tabs" style="display:none">
 
         <!-- 検索モード -->
         <div id="search-section">

@@ -13,6 +13,11 @@ struct StudioMember {
     username: String,
 }
 
+#[derive(Deserialize, Debug)]
+struct StudioProject {
+    author: ProjectAuthor,
+}
+
 #[derive(Deserialize, Debug, Default)]
 struct ProjectStats {
     loves: Option<u64>,
@@ -32,7 +37,6 @@ struct ApiProject {
     author: ProjectAuthor,
     #[serde(default)]
     stats: ProjectStats,
-    // 説明文・使い方（TurboWarpリンク検出用）
     #[serde(default)]
     description: String,
     #[serde(default)]
@@ -66,6 +70,39 @@ async fn fetch_studio_members(client: &reqwest::Client, studio_id: u64) -> Vec<S
         }
     }
     members
+}
+
+// スタジオに追加されている作品の作者を全件収集
+async fn fetch_studio_project_authors(client: &reqwest::Client, studio_id: u64) -> Vec<(u64, String)> {
+    let mut authors: Vec<(u64, String)> = Vec::new();
+    let mut offset = 0u64;
+    loop {
+        let url = format!(
+            "https://api.scratch.mit.edu/studios/{}/projects/?limit=40&offset={}",
+            studio_id, offset
+        );
+        match client.get(&url).send().await {
+            Ok(resp) if resp.status() == 200 => {
+                match resp.json::<Vec<StudioProject>>().await {
+                    Ok(batch) if !batch.is_empty() => {
+                        let len = batch.len() as u64;
+                        for p in batch {
+                            if let Some(uname) = p.author.username {
+                                authors.push((p.author.id, uname));
+                            }
+                        }
+                        if len < 40 { break; }
+                        offset += 40;
+                    }
+                    Ok(_) => break,
+                    Err(e) => { eprintln!("  [studio {} projects] JSONパース失敗: {}", studio_id, e); break; }
+                }
+            }
+            Ok(resp) => { eprintln!("  [studio {} projects] HTTP {}", studio_id, resp.status()); break; }
+            Err(e) => { eprintln!("  [studio {} projects] リクエスト失敗: {}", studio_id, e); break; }
+        }
+    }
+    authors
 }
 
 async fn fetch_user_projects(client: &reqwest::Client, username: &str) -> Vec<ApiProject> {
@@ -138,12 +175,21 @@ async fn main() {
     );
 
     let mut user_set: HashSet<(u64, String)> = HashSet::new();
+
+    // 元の取得: スタジオのマネージャー・キュレーターを収集
     for &sid in &studio_ids {
         println!("スタジオ {} のメンバーを取得中...", sid);
         let members = fetch_studio_members(&client, sid).await;
         println!("  → {} 人", members.len());
         for m in members { user_set.insert((m.id, m.username)); }
     }
+
+    // 追加の取得: スタジオ347956に追加されている作品の作者を収集
+    let target_studio: u64 = 347956;
+    println!("スタジオ {} の追加作品の作者を取得中...", target_studio);
+    let authors = fetch_studio_project_authors(&client, target_studio).await;
+    println!("  → {} 人（重複含む）", authors.len());
+    for (id, uname) in authors { user_set.insert((id, uname)); }
 
     let users: Vec<(u64, String)> = user_set.into_iter().collect();
     let total_users = users.len();
@@ -180,7 +226,6 @@ async fn main() {
                     let mut pw = pw.lock().await;
                     for p in &projects {
                         let author_name = p.author.username.as_deref().unwrap_or(&uname);
-                        // TurboWarpリンクが説明文か使い方に含まれるか
                         let has_tw = if has_turbowarp(&p.description) || has_turbowarp(&p.instructions) { 1 } else { 0 };
                         let line = format!(
                             "{{\"id\":{},\"title\":\"{}\",\"author_id\":{},\"author_username\":\"{}\",\"loves\":{},\"views\":{},\"has_tw\":{}}}\n",

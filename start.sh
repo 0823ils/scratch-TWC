@@ -1,19 +1,8 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 
-# studios.txt がなければサンプルを作成
-if [ ! -f studios.txt ]; then
-  cat > studios.txt <<'EOF'
-# 取得したいスタジオのIDを1行に1つ書いてください
-# スタジオのURLが https://scratch.mit.edu/studios/12345678/ なら 12345678 です
-# # から始まる行はコメントとして無視されます
-
-12345678
-87654321
-EOF
-  echo "studios.txt を作成しました。スタジオIDを入力してから再実行してください。"
-  exit 0
-fi
+# フォロー先を集める対象アカウント（第1引数で変更可: ./start.sh 別のユーザー名）
+TARGET_USER="${1:-TWC-ils}"
 
 echo "Rustをビルド中..."
 cargo build --release
@@ -24,14 +13,14 @@ fi
 
 echo ""
 echo "=== 取得フロー ==="
-echo "  1. studios.txt のスタジオからマネージャー・キュレーターを収集"
+echo "  1. ${TARGET_USER} がフォローしているユーザーを収集"
 echo "  2. 重複除去してから全ユーザーの全作品を取得"
 echo "  3. DBに取り込んで検索サーバーを起動"
 echo ""
 
 # データ取得（完了するまで待機）
 echo "データ取得を開始..."
-./target/release/scratch-mega-fetcher
+./target/release/scratch-mega-fetcher "$TARGET_USER"
 if [ $? -ne 0 ]; then
   echo "データ取得に失敗しました"
   exit 1

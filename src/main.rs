@@ -7,15 +7,14 @@ use std::collections::HashSet;
 
 const CONCURRENT_USERS: usize = 10;
 
+// フォロー先を集める対象アカウント（引数で上書き可: scratch-mega-fetcher <ユーザー名>）
+const DEFAULT_TARGET_USER: &str = "TWC-ils";
+
+// /users/<name>/following のレスポンス。余分なフィールドは無視される
 #[derive(Deserialize, Debug)]
-struct StudioMember {
+struct FollowedUser {
     id: u64,
     username: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct StudioProject {
-    author: ProjectAuthor,
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -43,66 +42,33 @@ struct ApiProject {
     instructions: String,
 }
 
-async fn fetch_studio_members(client: &reqwest::Client, studio_id: u64) -> Vec<StudioMember> {
-    let mut members: Vec<StudioMember> = Vec::new();
-    for role in ["managers", "curators"] {
-        let mut offset = 0u64;
-        loop {
-            let url = format!(
-                "https://api.scratch.mit.edu/studios/{}/{}/?limit=40&offset={}",
-                studio_id, role, offset
-            );
-            match client.get(&url).send().await {
-                Ok(resp) if resp.status() == 200 => {
-                    match resp.json::<Vec<StudioMember>>().await {
-                        Ok(batch) if !batch.is_empty() => {
-                            let len = batch.len() as u64;
-                            members.extend(batch);
-                            if len < 40 { break; }
-                            offset += 40;
-                        }
-                        _ => break,
-                    }
-                }
-                Ok(resp) => { eprintln!("  スタジオ {} {} HTTP {}", studio_id, role, resp.status()); break; }
-                Err(e) => { eprintln!("  スタジオ {} {} エラー: {}", studio_id, role, e); break; }
-            }
-        }
-    }
-    members
-}
-
-// スタジオに追加されている作品の作者を全件収集
-async fn fetch_studio_project_authors(client: &reqwest::Client, studio_id: u64) -> Vec<(u64, String)> {
-    let mut authors: Vec<(u64, String)> = Vec::new();
+// 指定ユーザーがフォローしている人を全件取得
+async fn fetch_following(client: &reqwest::Client, target: &str) -> Vec<FollowedUser> {
+    let mut users: Vec<FollowedUser> = Vec::new();
     let mut offset = 0u64;
     loop {
         let url = format!(
-            "https://api.scratch.mit.edu/studios/{}/projects/?limit=40&offset={}",
-            studio_id, offset
+            "https://api.scratch.mit.edu/users/{}/following/?limit=40&offset={}",
+            target, offset
         );
         match client.get(&url).send().await {
             Ok(resp) if resp.status() == 200 => {
-                match resp.json::<Vec<StudioProject>>().await {
+                match resp.json::<Vec<FollowedUser>>().await {
                     Ok(batch) if !batch.is_empty() => {
                         let len = batch.len() as u64;
-                        for p in batch {
-                            if let Some(uname) = p.author.username {
-                                authors.push((p.author.id, uname));
-                            }
-                        }
+                        users.extend(batch);
                         if len < 40 { break; }
                         offset += 40;
                     }
                     Ok(_) => break,
-                    Err(e) => { eprintln!("  [studio {} projects] JSONパース失敗: {}", studio_id, e); break; }
+                    Err(e) => { eprintln!("  [{} following] JSONパース失敗: {}", target, e); break; }
                 }
             }
-            Ok(resp) => { eprintln!("  [studio {} projects] HTTP {}", studio_id, resp.status()); break; }
-            Err(e) => { eprintln!("  [studio {} projects] リクエスト失敗: {}", studio_id, e); break; }
+            Ok(resp) => { eprintln!("  [{} following] HTTP {}", target, resp.status()); break; }
+            Err(e) => { eprintln!("  [{} following] リクエスト失敗: {}", target, e); break; }
         }
     }
-    authors
+    users
 }
 
 async fn fetch_user_projects(client: &reqwest::Client, username: &str) -> Vec<ApiProject> {
@@ -147,22 +113,9 @@ fn esc(s: &str) -> String {
 
 #[tokio::main]
 async fn main() {
-    let content = tokio::fs::read_to_string("studios.txt").await
-        .expect("studios.txt が見つかりません");
-
-    let studio_ids: Vec<u64> = content
-        .lines()
-        .map(|l| l.trim())
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .filter_map(|l| l.parse::<u64>().ok())
-        .collect();
-
-    if studio_ids.is_empty() {
-        eprintln!("studios.txt に有効なスタジオIDがありません");
-        return;
-    }
-
-    println!("対象スタジオ数: {}", studio_ids.len());
+    let target_user = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| DEFAULT_TARGET_USER.to_string());
 
     let client = Arc::new(
         reqwest::Client::builder()
@@ -174,22 +127,16 @@ async fn main() {
             .unwrap(),
     );
 
-    let mut user_set: HashSet<(u64, String)> = HashSet::new();
-
-    // 元の取得: スタジオのマネージャー・キュレーターを収集
-    for &sid in &studio_ids {
-        println!("スタジオ {} のメンバーを取得中...", sid);
-        let members = fetch_studio_members(&client, sid).await;
-        println!("  → {} 人", members.len());
-        for m in members { user_set.insert((m.id, m.username)); }
+    println!("{} がフォローしているユーザーを取得中...", target_user);
+    let followed = fetch_following(&client, &target_user).await;
+    if followed.is_empty() {
+        eprintln!("フォロー先を取得できませんでした（アカウント名やネットワークを確認してください）");
+        std::process::exit(1);
     }
+    println!("  → {} 人", followed.len());
 
-    // 追加の取得: スタジオ347956に追加されている作品の作者を収集
-    let target_studio: u64 = 347956;
-    println!("スタジオ {} の追加作品の作者を取得中...", target_studio);
-    let authors = fetch_studio_project_authors(&client, target_studio).await;
-    println!("  → {} 人（重複含む）", authors.len());
-    for (id, uname) in authors { user_set.insert((id, uname)); }
+    let mut user_set: HashSet<(u64, String)> = HashSet::new();
+    for u in followed { user_set.insert((u.id, u.username)); }
 
     let users: Vec<(u64, String)> = user_set.into_iter().collect();
     let total_users = users.len();
